@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -91,6 +92,7 @@ func (h *Handler) GetBalance(c *gin.Context) {
 			})
 
 		default:
+			log.Printf("GetWalletBalance failed: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "could not retrieve wallet balance",
 			})

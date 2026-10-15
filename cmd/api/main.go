@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"digital-wallet/internal/database"
+	"digital-wallet/internal/deposit"
+	"digital-wallet/internal/transfer"
 	"digital-wallet/internal/wallet"
 
 	"github.com/gin-gonic/gin"
@@ -21,14 +23,23 @@ func main() {
 	walletService := wallet.NewService(walletRepo)
 	walletHandler := wallet.NewHandler(walletService)
 
+	transferRepo := transfer.NewRepository(db)
+	transferService := transfer.NewService(transferRepo)
+	transferHandler := transfer.NewHandler(transferService)
+
+	depositRepo := deposit.NewRepository(db)
+	depositService := deposit.NewService(depositRepo)
+	depositHandler := deposit.NewHandler(depositService)
 
 	router := gin.Default()
 
 	api := router.Group("/api/v1")
-{
-	api.POST("/wallets", walletHandler.CreateWallet)
-	api.GET("/wallets/:id/balance", walletHandler.GetBalance)
-}
+	{
+		api.POST("/wallets", walletHandler.CreateWallet)
+		api.GET("/wallets/:id/balance", walletHandler.GetBalance)
+		api.POST("/transfers", transferHandler.CreateTransfer)
+		api.POST("/deposits", depositHandler.CreateDeposit)
+	}
 
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{

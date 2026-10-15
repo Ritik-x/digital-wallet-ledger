@@ -85,11 +85,13 @@ func (r *PostgresRepository) GetBalance(
 				),
 				0
 			) AS balance_minor
-		FROM wallets w
-		LEFT JOIN ledger_entries le
-			ON le.wallet_id = w.id
-		WHERE w.id = $1
-		GROUP BY w.id, w.currency
+  FROM wallets AS w
+        JOIN ledger_accounts AS la
+            ON la.wallet_id = w.id
+        LEFT JOIN ledger_entries AS le
+            ON le.ledger_account_id = la.id
+        WHERE w.id = $1
+        GROUP BY w.id, w.currency
 	`
 
 	var balance Balance
