@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	ErrInvalidUserID  = errors.New("user ID must be positive")
+	ErrInvalidUserID   = errors.New("user ID must be positive")
 	ErrInvalidWalletID = errors.New("wallet ID must be positive")
 	ErrInvalidCurrency = errors.New("currency must contain three letters")
 )

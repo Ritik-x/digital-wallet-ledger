@@ -9,9 +9,9 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func Connect()(*sql.DB ,error){
-	_= godotenv.Load(	)
-		host := os.Getenv("DB_HOST")
+func Connect() (*sql.DB, error) {
+	_ = godotenv.Load()
+	host := os.Getenv("DB_HOST")
 	port := os.Getenv("DB_PORT")
 	user := os.Getenv("DB_USER")
 	password := os.Getenv("DB_PASSWORD")
@@ -29,14 +29,12 @@ func Connect()(*sql.DB ,error){
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		host, port, user, password, dbName, sslMode,
 	)
-db, err := sql.Open("pgx", dsn)
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-
-
-		if err := db.Ping(); err != nil {
+	if err := db.Ping(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("ping database: %w", err)
 	}

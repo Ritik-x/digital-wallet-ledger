@@ -3,7 +3,9 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
+	"digital-wallet/internal/auth"
 	"digital-wallet/internal/database"
 	"digital-wallet/internal/deposit"
 	"digital-wallet/internal/transfer"
@@ -31,14 +33,30 @@ func main() {
 	depositService := deposit.NewService(depositRepo)
 	depositHandler := deposit.NewHandler(depositService)
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if len(jwtSecret) < 32 {
+		log.Fatal("JWT_SECRET must be configured with at least 32 characters")
+	}
+
+	authRepo := auth.NewPostgresUserRepository(db)
+	authService := auth.NewService(authRepo, jwtSecret)
+	authHandler := auth.NewHandler(authService)
 	router := gin.Default()
 
 	api := router.Group("/api/v1")
+
 	{
-		api.POST("/wallets", walletHandler.CreateWallet)
-		api.GET("/wallets/:id/balance", walletHandler.GetBalance)
-		api.POST("/transfers", transferHandler.CreateTransfer)
-		api.POST("/deposits", depositHandler.CreateDeposit)
+
+		api.POST("/auth/register", authHandler.Register)
+		api.POST("/auth/login", authHandler.Login)
+		protected := api.Group("")
+		protected.Use(auth.Middleware(jwtSecret))
+
+		protected.POST("/wallets", walletHandler.CreateWallet)
+		protected.GET("/wallets/:id/balance", walletHandler.GetBalance)
+		protected.POST("/transfers", transferHandler.CreateTransfer)
+		protected.POST("/deposits", depositHandler.CreateDeposit)
+
 	}
 
 	router.GET("/health", func(c *gin.Context) {
