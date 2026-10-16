@@ -56,6 +56,15 @@ historyHandler := history.NewHandler(historyService)
 reversalRepo := transfer.NewPostgresReversalRepository(db)
 reversalService := transfer.NewReversalService(reversalRepo)
 reversalHandler := transfer.NewReversalHandler(reversalService)
+
+
+
+depositReversalRepo := deposit.NewPostgresReversalRepository(db)
+depositReversalService := deposit.NewReversalService(depositReversalRepo)
+depositReversalHandler := deposit.NewReversalHandler(depositReversalService)
+
+
+
 	router := gin.Default()
 
 	api := router.Group("/api/v1")
@@ -80,6 +89,7 @@ protected.POST(
 	"/transfers/:id/reverse",
 	reversalHandler.Reverse,
 )
+protected.POST("/deposits/:id/reverse", depositReversalHandler.Reverse)
 
 	}
 

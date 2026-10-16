@@ -31,59 +31,110 @@ func (r *PostgresRepository) List(
 	rows, err := r.db.QueryContext(
 		ctx,
 		`
-		WITH owned_wallet AS (
-			SELECT id, currency
-			FROM wallets
-			WHERE id = $1
-			  AND user_id = $2
-		),
-		wallet_transactions AS (
-			SELECT
-				t.id,
-				CASE
-					WHEN t.sender_wallet_id = w.id
-						THEN 'transfer_sent'
-					ELSE 'transfer_received'
-				END AS transaction_type,
-				t.amount_minor,
-				t.currency,
-				t.status,
-				CASE
-					WHEN t.sender_wallet_id = w.id
-						THEN t.receiver_wallet_id
-					ELSE t.sender_wallet_id
-				END AS counterparty_wallet_id,
-				t.created_at
-			FROM transfers AS t
-			JOIN owned_wallet AS w
-				ON t.sender_wallet_id = w.id
-				OR t.receiver_wallet_id = w.id
+	WITH owned_wallet AS (
+    SELECT id, currency
+    FROM wallets
+    WHERE id = $1
+      AND user_id = $2
+),
+wallet_transactions AS (
 
-			UNION ALL
+    -- 1. Original transfers involving this wallet.
+    SELECT
+        t.id,
+        CASE
+            WHEN t.sender_wallet_id = ow.id
+                THEN 'transfer_sent'
+            ELSE 'transfer_received'
+        END AS transaction_type,
+        t.amount_minor,
+        t.currency,
+        t.status,
+        CASE
+            WHEN t.sender_wallet_id = ow.id
+                THEN t.receiver_wallet_id
+            ELSE t.sender_wallet_id
+        END AS counterparty_wallet_id,
+        t.created_at
+    FROM transfers t
+    JOIN owned_wallet ow
+      ON t.sender_wallet_id = ow.id
+      OR t.receiver_wallet_id = ow.id
 
-			SELECT
-				d.id,
-				'deposit' AS transaction_type,
-				d.amount_minor,
-				d.currency,
-				d.status,
-				NULL::BIGINT AS counterparty_wallet_id,
-				d.created_at
-			FROM deposits AS d
-			JOIN owned_wallet AS w
-				ON d.wallet_id = w.id
-		)
-		SELECT
-			id,
-			transaction_type,
-			amount_minor,
-			currency,
-			status,
-			counterparty_wallet_id,
-			created_at
-		FROM wallet_transactions
-		ORDER BY created_at DESC, id DESC, transaction_type DESC
-		LIMIT $3 OFFSET $4
+    UNION ALL
+
+    -- 2. Original deposits.
+    SELECT
+        d.id,
+        'deposit' AS transaction_type,
+        d.amount_minor,
+        d.currency,
+        d.status,
+        NULL::BIGINT AS counterparty_wallet_id,
+        d.created_at
+    FROM deposits d
+    JOIN owned_wallet ow
+      ON d.wallet_id = ow.id
+
+    UNION ALL
+
+    -- 3. Transfer reversals.
+    -- The original sender receives money back;
+    -- the original receiver has money deducted.
+    SELECT
+        tr.id,
+        CASE
+            WHEN t.sender_wallet_id = ow.id
+                THEN 'transfer_reversal_received'
+            ELSE 'transfer_reversal_sent'
+        END AS transaction_type,
+        t.amount_minor,
+        t.currency,
+        'posted' AS status,
+        CASE
+            WHEN t.sender_wallet_id = ow.id
+                THEN t.receiver_wallet_id
+            ELSE t.sender_wallet_id
+        END AS counterparty_wallet_id,
+        tr.created_at
+    FROM transfer_reversals tr
+    JOIN transfers t
+      ON t.id = tr.transfer_id
+    JOIN owned_wallet ow
+      ON t.sender_wallet_id = ow.id
+      OR t.receiver_wallet_id = ow.id
+
+    UNION ALL
+
+    -- 4. Deposit reversals.
+    SELECT
+        dr.id,
+        'deposit_reversal' AS transaction_type,
+        d.amount_minor,
+        d.currency,
+        'posted' AS status,
+        NULL::BIGINT AS counterparty_wallet_id,
+        dr.created_at
+    FROM deposit_reversals dr
+    JOIN deposits d
+      ON d.id = dr.deposit_id
+    JOIN owned_wallet ow
+      ON d.wallet_id = ow.id
+)
+SELECT
+    id,
+    transaction_type,
+    amount_minor,
+    currency,
+    status,
+    counterparty_wallet_id,
+    created_at
+FROM wallet_transactions
+ORDER BY
+    created_at DESC,
+    id DESC,
+    transaction_type DESC
+LIMIT $3 OFFSET $4;
 		`,
 		input.WalletID,
 		input.UserID,
