@@ -1,8 +1,10 @@
 package transfer
 
 import (
+	"digital-wallet/internal/auth"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -31,8 +33,24 @@ func (h *Handler) CreateTransfer(c *gin.Context) {
 		})
 		return
 	}
+	key := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
 
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Idempotency-Key header is required",
+		})
+		return
+	}
+
+	userID, ok := auth.UserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "unauthorized",
+		})
+		return
+	}
 	input := CreateTransferInput{
+		UserID:           userID,
 		SenderWalletID:   req.SenderWalletID,
 		ReceiverWalletID: req.ReceiverWalletID,
 		AmountMinor:      req.AmountMinor,
@@ -43,6 +61,7 @@ func (h *Handler) CreateTransfer(c *gin.Context) {
 		c.Request.Context(),
 		input,
 	)
+
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidWalletID),
@@ -71,6 +90,10 @@ func (h *Handler) CreateTransfer(c *gin.Context) {
 		case errors.Is(err, ErrInsufficientFunds):
 			c.JSON(http.StatusUnprocessableEntity, gin.H{
 				"error": "insufficient funds",
+			})
+		case errors.Is(err, ErrIdempotencyConflict):
+			c.JSON(http.StatusConflict, gin.H{
+				"error": "Idempotency-Key was already used for a different transfer",
 			})
 
 		default:

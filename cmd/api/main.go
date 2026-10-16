@@ -8,6 +8,7 @@ import (
 	"digital-wallet/internal/auth"
 	"digital-wallet/internal/database"
 	"digital-wallet/internal/deposit"
+	"digital-wallet/internal/history"
 	"digital-wallet/internal/transfer"
 	"digital-wallet/internal/wallet"
 
@@ -41,6 +42,20 @@ func main() {
 	authRepo := auth.NewPostgresUserRepository(db)
 	authService := auth.NewService(authRepo, jwtSecret)
 	authHandler := auth.NewHandler(authService)
+
+
+
+
+	historyRepo := history.NewPostgresRepository(db)
+historyService := history.NewService(historyRepo)
+historyHandler := history.NewHandler(historyService)
+
+
+
+
+reversalRepo := transfer.NewPostgresReversalRepository(db)
+reversalService := transfer.NewReversalService(reversalRepo)
+reversalHandler := transfer.NewReversalHandler(reversalService)
 	router := gin.Default()
 
 	api := router.Group("/api/v1")
@@ -56,6 +71,15 @@ func main() {
 		protected.GET("/wallets/:id/balance", walletHandler.GetBalance)
 		protected.POST("/transfers", transferHandler.CreateTransfer)
 		protected.POST("/deposits", depositHandler.CreateDeposit)
+
+		protected.GET(
+	"/wallets/:id/transactions",
+	historyHandler.List,
+)
+protected.POST(
+	"/transfers/:id/reverse",
+	reversalHandler.Reverse,
+)
 
 	}
 

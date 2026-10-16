@@ -3,12 +3,13 @@ package transfer
 import "time"
 
 type CreateTransferInput struct {
+	UserID           int64
 	SenderWalletID   int64
 	ReceiverWalletID int64
 	AmountMinor      int64
 	Currency         string
+	IdempotencyKey   string
 }
-
 type Transfer struct {
 	ID               int64     `json:"id"`
 	SenderWalletID   int64     `json:"sender_wallet_id"`

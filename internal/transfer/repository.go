@@ -9,10 +9,13 @@ import (
 )
 
 var (
-	ErrWalletNotFound    = errors.New("wallet not found")
-	ErrWalletUnavailable = errors.New("wallet is not active")
-	ErrCurrencyMismatch  = errors.New("currency mismatch")
-	ErrInsufficientFunds = errors.New("insufficient funds")
+	ErrWalletNotFound      = errors.New("wallet not found")
+	ErrWalletUnavailable   = errors.New("wallet is not active")
+	ErrCurrencyMismatch    = errors.New("currency mismatch")
+	ErrInsufficientFunds   = errors.New("insufficient funds")
+	ErrIdempotencyConflict = errors.New(
+		"idempotency key already used for a different transfer",
+	)
 )
 
 type Repository interface {
@@ -32,6 +35,7 @@ func NewRepository(db *sql.DB) *PostgresRepository {
 
 type lockedWallet struct {
 	ID       int64
+	UserID   int64
 	Currency string
 	Status   string
 }
@@ -46,10 +50,12 @@ func (r *PostgresRepository) Create(
 	}
 	defer tx.Rollback()
 
+	// Lock wallets in ascending ID order to reduce deadlocks.
 	walletIDs := []int64{
 		input.SenderWalletID,
 		input.ReceiverWalletID,
 	}
+
 	sort.Slice(walletIDs, func(i, j int) bool {
 		return walletIDs[i] < walletIDs[j]
 	})
@@ -61,13 +67,14 @@ func (r *PostgresRepository) Create(
 
 		err := tx.QueryRowContext(
 			ctx,
-			`SELECT id, currency, status
+			`SELECT id, user_id, currency, status
 			 FROM wallets
 			 WHERE id = $1
 			 FOR UPDATE`,
 			walletID,
 		).Scan(
 			&wallet.ID,
+			&wallet.UserID,
 			&wallet.Currency,
 			&wallet.Status,
 		)
@@ -85,6 +92,28 @@ func (r *PostgresRepository) Create(
 	sender := wallets[input.SenderWalletID]
 	receiver := wallets[input.ReceiverWalletID]
 
+	// Only the owner of the sender wallet can initiate this transfer.
+	if sender.UserID != input.UserID {
+		return nil, ErrWalletNotFound
+	}
+
+	// Check for an already completed request BEFORE checking balance.
+	// A retry must not debit the sender a second time.
+	existing, err := findTransferByIdempotencyKey(
+		ctx,
+		tx,
+		input.UserID,
+		input.IdempotencyKey,
+	)
+
+	if err == nil {
+		return validateTransferReplay(existing, input)
+	}
+
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("find existing transfer: %w", err)
+	}
+
 	if sender.Status != "active" || receiver.Status != "active" {
 		return nil, ErrWalletUnavailable
 	}
@@ -99,21 +128,21 @@ func (r *PostgresRepository) Create(
 	err = tx.QueryRowContext(
 		ctx,
 		`SELECT COALESCE(
-        SUM(
-            CASE
-                WHEN le.entry_type = 'credit'
-                    THEN le.amount_minor
-                WHEN le.entry_type = 'debit'
-                    THEN -le.amount_minor
-                ELSE 0
-            END
-        ),
-        0
-    )
-    FROM ledger_accounts AS la
-    LEFT JOIN ledger_entries AS le
-        ON le.ledger_account_id = la.id
-    WHERE la.wallet_id = $1`,
+			SUM(
+				CASE
+					WHEN le.entry_type = 'credit'
+						THEN le.amount_minor
+					WHEN le.entry_type = 'debit'
+						THEN -le.amount_minor
+					ELSE 0
+				END
+			),
+			0
+		)
+		FROM ledger_accounts AS la
+		LEFT JOIN ledger_entries AS le
+			ON le.ledger_account_id = la.id
+		WHERE la.wallet_id = $1`,
 		input.SenderWalletID,
 	).Scan(&balance)
 
@@ -134,15 +163,26 @@ func (r *PostgresRepository) Create(
 			receiver_wallet_id,
 			amount_minor,
 			currency,
-			status
+			status,
+			idempotency_key
 		)
-		VALUES ($1, $2, $3, $4, 'posted')
-		RETURNING id, sender_wallet_id, receiver_wallet_id,
-		          amount_minor, currency, status, created_at`,
+		VALUES ($1, $2, $3, $4, 'posted', $5)
+		ON CONFLICT (idempotency_key)
+			WHERE idempotency_key IS NOT NULL
+		DO NOTHING
+		RETURNING
+			id,
+			sender_wallet_id,
+			receiver_wallet_id,
+			amount_minor,
+			currency,
+			status,
+			created_at`,
 		input.SenderWalletID,
 		input.ReceiverWalletID,
 		input.AmountMinor,
 		input.Currency,
+		input.IdempotencyKey,
 	).Scan(
 		&transfer.ID,
 		&transfer.SenderWalletID,
@@ -153,35 +193,63 @@ func (r *PostgresRepository) Create(
 		&transfer.CreatedAt,
 	)
 
+	if errors.Is(err, sql.ErrNoRows) {
+		// Another request may have inserted this key concurrently.
+		existing, lookupErr := findTransferByIdempotencyKey(
+			ctx,
+			tx,
+			input.UserID,
+			input.IdempotencyKey,
+		)
+
+		if lookupErr == nil {
+			return validateTransferReplay(existing, input)
+		}
+
+		if !errors.Is(lookupErr, sql.ErrNoRows) {
+			return nil, fmt.Errorf(
+				"find conflicting transfer: %w",
+				lookupErr,
+			)
+		}
+
+		// The key exists, but is not associated with a transfer
+		// this user is authorized to view.
+		return nil, ErrIdempotencyConflict
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("insert transfer: %w", err)
 	}
 
-	// Record the debit.
-
+	// Find the sender's ledger account.
 	var senderAccountID int64
 
 	err = tx.QueryRowContext(
 		ctx,
 		`SELECT id
-     FROM ledger_accounts
-     WHERE wallet_id = $1`,
+		 FROM ledger_accounts
+		 WHERE wallet_id = $1
+		   AND currency = $2
+		   AND status = 'active'`,
 		input.SenderWalletID,
+		input.Currency,
 	).Scan(&senderAccountID)
 
 	if err != nil {
 		return nil, fmt.Errorf("find sender ledger account: %w", err)
 	}
 
+	// Record the debit.
 	_, err = tx.ExecContext(
 		ctx,
 		`INSERT INTO ledger_entries (
-        transfer_id,
-        ledger_account_id,
-        entry_type,
-        amount_minor
-    )
-    VALUES ($1, $2, 'debit', $3)`,
+			transfer_id,
+			ledger_account_id,
+			entry_type,
+			amount_minor
+		)
+		VALUES ($1, $2, 'debit', $3)`,
 		transfer.ID,
 		senderAccountID,
 		input.AmountMinor,
@@ -191,31 +259,34 @@ func (r *PostgresRepository) Create(
 		return nil, fmt.Errorf("insert debit entry: %w", err)
 	}
 
-	// Record the credit.
-
+	// Find the receiver's ledger account.
 	var receiverAccountID int64
 
 	err = tx.QueryRowContext(
 		ctx,
 		`SELECT id
-     FROM ledger_accounts
-     WHERE wallet_id = $1`,
+		 FROM ledger_accounts
+		 WHERE wallet_id = $1
+		   AND currency = $2
+		   AND status = 'active'`,
 		input.ReceiverWalletID,
+		input.Currency,
 	).Scan(&receiverAccountID)
 
 	if err != nil {
 		return nil, fmt.Errorf("find receiver ledger account: %w", err)
 	}
 
+	// Record the credit.
 	_, err = tx.ExecContext(
 		ctx,
 		`INSERT INTO ledger_entries (
-        transfer_id,
-        ledger_account_id,
-        entry_type,
-        amount_minor
-    )
-    VALUES ($1, $2, 'credit', $3)`,
+			transfer_id,
+			ledger_account_id,
+			entry_type,
+			amount_minor
+		)
+		VALUES ($1, $2, 'credit', $3)`,
 		transfer.ID,
 		receiverAccountID,
 		input.AmountMinor,
@@ -225,10 +296,66 @@ func (r *PostgresRepository) Create(
 		return nil, fmt.Errorf("insert credit entry: %w", err)
 	}
 
-	// Nothing becomes committed until all writes succeed.
+	// The transfer and both ledger entries commit together.
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit transfer: %w", err)
 	}
 
 	return &transfer, nil
+}
+
+func findTransferByIdempotencyKey(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID int64,
+	key string,
+) (*Transfer, error) {
+	var result Transfer
+
+	err := tx.QueryRowContext(
+		ctx,
+		`SELECT
+			t.id,
+			t.sender_wallet_id,
+			t.receiver_wallet_id,
+			t.amount_minor,
+			t.currency,
+			t.status,
+			t.created_at
+		FROM transfers AS t
+		JOIN wallets AS sender
+			ON sender.id = t.sender_wallet_id
+		WHERE t.idempotency_key = $1
+		  AND sender.user_id = $2`,
+		key,
+		userID,
+	).Scan(
+		&result.ID,
+		&result.SenderWalletID,
+		&result.ReceiverWalletID,
+		&result.AmountMinor,
+		&result.Currency,
+		&result.Status,
+		&result.CreatedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+func validateTransferReplay(
+	existing *Transfer,
+	input CreateTransferInput,
+) (*Transfer, error) {
+	if existing.SenderWalletID != input.SenderWalletID ||
+		existing.ReceiverWalletID != input.ReceiverWalletID ||
+		existing.AmountMinor != input.AmountMinor ||
+		existing.Currency != input.Currency {
+		return nil, ErrIdempotencyConflict
+	}
+
+	return existing, nil
 }

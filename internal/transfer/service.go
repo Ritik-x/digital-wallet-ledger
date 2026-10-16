@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 var (
-	ErrInvalidWalletID = errors.New("wallet IDs must be positive")
-	ErrSameWallet      = errors.New("sender and receiver must differ")
-	ErrInvalidAmount   = errors.New("amount must be positive")
-	ErrInvalidCurrency = errors.New("currency must contain three letters")
+	ErrInvalidWalletID       = errors.New("wallet IDs must be positive")
+	ErrSameWallet            = errors.New("sender and receiver must differ")
+	ErrInvalidAmount         = errors.New("amount must be positive")
+	ErrInvalidCurrency       = errors.New("currency must contain three letters")
+	ErrInvalidIdempotencyKey = errors.New("idempotency key is required")
 )
 
 type Service struct {
@@ -44,6 +46,13 @@ func (s *Service) CreateTransfer(
 			return nil, ErrInvalidCurrency
 		}
 	}
+
+	input.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
+
+	if input.IdempotencyKey == "" || len(input.IdempotencyKey) > 200 {
+		return nil, ErrInvalidIdempotencyKey
+	}
+
 	transfer, err := s.repo.Create(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("create transfer: %w", err)
