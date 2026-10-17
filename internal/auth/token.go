@@ -2,7 +2,6 @@ package auth
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -16,28 +15,38 @@ var (
 
 type Claims struct {
 	UserID int64 `json:"user_id"`
+	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
+
 func GenerateToken(
 	userID int64,
+	role string,
 	secret string,
 	ttl time.Duration,
 ) (string, error) {
 	if userID <= 0 {
-		return "", ErrInvalidUserID
+		return "", errors.New("user ID must be positive")
+	}
+
+	if role != "customer" && role != "support" && role != "admin" {
+		return "", errors.New("invalid user role")
 	}
 
 	if len(secret) < 32 {
-		return "", errors.New("JWT secret must be at least 32 bytes")
+		return "", errors.New("JWT secret must be at least 32 characters")
 	}
 
 	if ttl <= 0 {
-		return "", errors.New("token lifetime must be positive")
+		return "", errors.New("token TTL must be positive")
 	}
+
 	now := time.Now()
+
 	claims := Claims{
 		UserID: userID,
+		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "digital-wallet",
 			Subject:   strconv.FormatInt(userID, 10),
@@ -45,15 +54,10 @@ func GenerateToken(
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 		},
 	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	signedToken, err := token.SignedString([]byte(secret))
-	if err != nil {
-		return "", fmt.Errorf("sign JWT: %w", err)
-	}
-
-	return signedToken, nil
-
+	return token.SignedString([]byte(secret))
 }
 
 func ParseToken(
@@ -82,10 +86,17 @@ func ParseToken(
 		return nil, ErrInvalidToken
 	}
 
+	
 	if claims.UserID <= 0 ||
 		claims.Subject != strconv.FormatInt(claims.UserID, 10) {
 		return nil, ErrInvalidToken
 	}
+
+	if claims.Role != "customer" &&
+    claims.Role != "support" &&
+    claims.Role != "admin" {
+    return nil, errors.New("invalid user role")
+}
 
 	return claims, nil
 }

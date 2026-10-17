@@ -99,6 +99,7 @@ func (s *Service) Login(
 
 	token, err := GenerateToken(
 		user.ID,
+		user.Role,
 		s.jwtSecret,
 		15*time.Minute,
 	)

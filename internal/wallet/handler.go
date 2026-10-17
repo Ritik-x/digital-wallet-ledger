@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"digital-wallet/internal/auth"
 	"errors"
 	"log"
 	"net/http"
@@ -19,9 +20,9 @@ func NewHandler(service *Service) *Handler {
 }
 
 type createWalletRequest struct {
-	UserID   int64  `json:"user_id" binding:"required,gt=0"`
 	Currency string `json:"currency" binding:"required,len=3"`
 }
+
 
 func (h *Handler) CreateWallet(c *gin.Context) {
 	var req createWalletRequest
@@ -33,8 +34,16 @@ func (h *Handler) CreateWallet(c *gin.Context) {
 		return
 	}
 
+	userID, ok := auth.UserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "authentication required",
+		})
+		return
+	}
+
 	input := CreateWalletInput{
-		UserID:   req.UserID,
+		UserID:   userID,
 		Currency: req.Currency,
 	}
 
@@ -56,6 +65,7 @@ func (h *Handler) CreateWallet(c *gin.Context) {
 			})
 
 		default:
+			log.Printf("CreateWallet failed: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "could not create wallet",
 			})
@@ -65,6 +75,7 @@ func (h *Handler) CreateWallet(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, wallet)
 }
+
 
 func (h *Handler) GetBalance(c *gin.Context) {
 	walletID, err := strconv.ParseInt(c.Param("id"), 10, 64)

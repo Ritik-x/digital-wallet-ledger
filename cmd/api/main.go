@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"digital-wallet/internal/auth"
 	"digital-wallet/internal/database"
 	"digital-wallet/internal/deposit"
 	"digital-wallet/internal/history"
+	"digital-wallet/internal/ratelimit"
 	"digital-wallet/internal/transfer"
 	"digital-wallet/internal/wallet"
 
@@ -62,58 +65,79 @@ reversalHandler := transfer.NewReversalHandler(reversalService)
 depositReversalRepo := deposit.NewPostgresReversalRepository(db)
 depositReversalService := deposit.NewReversalService(depositReversalRepo)
 depositReversalHandler := deposit.NewReversalHandler(depositReversalService)
-
-
-
-	router := gin.Default()
-
-	api := router.Group("/api/v1")
-
-	{
-
-		api.POST("/auth/register", authHandler.Register)
-		api.POST("/auth/login", authHandler.Login)
-		protected := api.Group("")
-		protected.Use(auth.Middleware(jwtSecret))
-
-		protected.POST("/wallets", walletHandler.CreateWallet)
-		protected.GET("/wallets/:id/balance", walletHandler.GetBalance)
-		protected.POST("/transfers", transferHandler.CreateTransfer)
-		protected.POST("/deposits", depositHandler.CreateDeposit)
-
-		protected.GET(
-	"/wallets/:id/transactions",
-	historyHandler.List,
+startupCtx, cancel := context.WithTimeout(
+    context.Background(),
+    5*time.Second,
 )
-protected.POST(
-	"/transfers/:id/reverse",
-	reversalHandler.Reverse,
-)
+defer cancel()
+
+redisClient , err := ratelimit.NewRedisClient(startupCtx)
+if err != nil {
+	log.Fatalf("initialize Redis: %v", err)
+}
+defer redisClient.Close()
+rateLimiter:=ratelimit.NewLimiter(redisClient)
+
+
+router := gin.Default()
+
+api := router.Group("/api/v1")
+
+// Initialize rate limiting for all API routes.
+authRoutes := api.Group("/auth")
+authRoutes.Use(ratelimit.Middleware(
+	rateLimiter,
+	10,
+	time.Minute,
+	"ratelimit:auth",
+))
+authRoutes.POST("/register", authHandler.Register)
+authRoutes.POST("/login", authHandler.Login)
+
+// Authenticated routes.
+protected := api.Group("")
+protected.Use(auth.Middleware(jwtSecret))
+protected.Use(ratelimit.Middleware(
+	rateLimiter,
+	100,
+	time.Minute,
+	"ratelimit:api",
+))
+
+protected.POST("/wallets", walletHandler.CreateWallet)
+protected.GET("/wallets/:id/balance", walletHandler.GetBalance)
+
+protected.POST("/transfers", transferHandler.CreateTransfer)
+protected.POST("/transfers/:id/reverse", reversalHandler.Reverse)
+
+protected.POST("/deposits", depositHandler.CreateDeposit)
 protected.POST("/deposits/:id/reverse", depositReversalHandler.Reverse)
 
+protected.GET("/wallets/:id/transactions", historyHandler.List)
+
+// Health checks.
+router.GET("/health", func(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status": "ok",
+	})
+})
+
+router.GET("/health/db", func(c *gin.Context) {
+	if err := db.PingContext(c.Request.Context()); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status": "unavailable",
+		})
+		return
 	}
 
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-		})
+	c.JSON(http.StatusOK, gin.H{
+		"status":   "ok",
+		"database": "connected",
 	})
+})
 
-	router.GET("/health/db", func(c *gin.Context) {
-		if err := db.PingContext(c.Request.Context()); err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status": "unavailable",
-			})
-			return
-		}
+if err := router.Run(":8080"); err != nil {
+	log.Fatalf("server failed: %v", err)
+}
 
-		c.JSON(http.StatusOK, gin.H{
-			"status":   "ok",
-			"database": "connected",
-		})
-	})
-
-	if err := router.Run(":8080"); err != nil {
-		log.Fatalf("server failed: %v", err)
-	}
 }

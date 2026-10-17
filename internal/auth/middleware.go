@@ -33,6 +33,7 @@ func Middleware(secret string) gin.HandlerFunc {
 		}
 
 		c.Set(ContextUserIDKey, claims.UserID)
+		c.Set("authenticated_user_role", claims.Role)
 		c.Next()
 	}
 }
@@ -49,4 +50,37 @@ func UserIDFromContext(c *gin.Context) (int64, bool) {
 	}
 
 	return userID, true
+}
+
+
+
+func RequireRole(allowedRoles ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		value, exists := c.Get("authenticated_user_role")
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": "authentication required",
+			})
+			return
+		}
+
+		role, ok := value.(string)
+		if !ok || role == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": "authentication required",
+			})
+			return
+		}
+
+		for _, allowed := range allowedRoles {
+			if role == allowed {
+				c.Next()
+				return
+			}
+		}
+
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+			"error": "insufficient permissions",
+		})
+	}
 }
