@@ -46,103 +46,101 @@ func main() {
 	authService := auth.NewService(authRepo, jwtSecret)
 	authHandler := auth.NewHandler(authService)
 
-
-
-
 	historyRepo := history.NewPostgresRepository(db)
-historyService := history.NewService(historyRepo)
-historyHandler := history.NewHandler(historyService)
+	historyService := history.NewService(historyRepo)
+	historyHandler := history.NewHandler(historyService)
 
+	reversalRepo := transfer.NewPostgresReversalRepository(db)
+	reversalService := transfer.NewReversalService(reversalRepo)
+	reversalHandler := transfer.NewReversalHandler(reversalService)
 
+	depositReversalRepo := deposit.NewPostgresReversalRepository(db)
+	depositReversalService := deposit.NewReversalService(depositReversalRepo)
+	depositReversalHandler := deposit.NewReversalHandler(depositReversalService)
+	startupCtx, cancel := context.WithTimeout(
+		context.Background(),
+		5*time.Second,
+	)
+	defer cancel()
 
+	redisClient, err := ratelimit.NewRedisClient(startupCtx)
+	if err != nil {
+		log.Fatalf("initialize Redis: %v", err)
+	}
+	defer redisClient.Close()
+	rateLimiter := ratelimit.NewLimiter(redisClient)
 
-reversalRepo := transfer.NewPostgresReversalRepository(db)
-reversalService := transfer.NewReversalService(reversalRepo)
-reversalHandler := transfer.NewReversalHandler(reversalService)
+	router := gin.Default()
 
+	api := router.Group("/api/v1")
 
+	// Initialize rate limiting for all API routes.
+	authRoutes := api.Group("/auth")
+	authRoutes.Use(ratelimit.Middleware(
+		rateLimiter,
+		10,
+		time.Minute,
+		"ratelimit:auth",
+	))
+	authRoutes.POST("/register", authHandler.Register)
+	authRoutes.POST("/login", authHandler.Login)
 
-depositReversalRepo := deposit.NewPostgresReversalRepository(db)
-depositReversalService := deposit.NewReversalService(depositReversalRepo)
-depositReversalHandler := deposit.NewReversalHandler(depositReversalService)
-startupCtx, cancel := context.WithTimeout(
-    context.Background(),
-    5*time.Second,
-)
-defer cancel()
+	// Authenticated routes.
+	protected := api.Group("")
+	protected.Use(auth.Middleware(jwtSecret))
+	protected.Use(ratelimit.Middleware(
+		rateLimiter,
+		100,
+		time.Minute,
+		"ratelimit:api",
+	))
 
-redisClient , err := ratelimit.NewRedisClient(startupCtx)
-if err != nil {
-	log.Fatalf("initialize Redis: %v", err)
-}
-defer redisClient.Close()
-rateLimiter:=ratelimit.NewLimiter(redisClient)
+	protected.POST("/wallets", walletHandler.CreateWallet)
+	protected.GET("/wallets/:id/balance", walletHandler.GetBalance)
 
+	protected.POST("/transfers", transferHandler.CreateTransfer)
+	protected.POST("/transfers/:id/reverse", reversalHandler.Reverse)
 
-router := gin.Default()
+	protected.POST("/deposits", depositHandler.CreateDeposit)
+	protected.POST("/deposits/:id/reverse", depositReversalHandler.Reverse)
 
-api := router.Group("/api/v1")
+	protected.GET("/wallets/:id/transactions", historyHandler.List)
 
-// Initialize rate limiting for all API routes.
-authRoutes := api.Group("/auth")
-authRoutes.Use(ratelimit.Middleware(
-	rateLimiter,
-	10,
-	time.Minute,
-	"ratelimit:auth",
-))
-authRoutes.POST("/register", authHandler.Register)
-authRoutes.POST("/login", authHandler.Login)
-
-// Authenticated routes.
-protected := api.Group("")
-protected.Use(auth.Middleware(jwtSecret))
-protected.Use(ratelimit.Middleware(
-	rateLimiter,
-	100,
-	time.Minute,
-	"ratelimit:api",
-))
-
-protected.POST("/wallets", walletHandler.CreateWallet)
-protected.GET("/wallets/:id/balance", walletHandler.GetBalance)
-
-protected.POST("/transfers", transferHandler.CreateTransfer)
-protected.POST("/transfers/:id/reverse", reversalHandler.Reverse)
-
-protected.POST("/deposits", depositHandler.CreateDeposit)
-protected.POST("/deposits/:id/reverse", depositReversalHandler.Reverse)
-
-protected.GET("/wallets/:id/transactions", historyHandler.List)
-
-// Health checks.
-router.GET("/health", func(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"status": "ok",
-	})
-})
-
-router.GET("/health/db", func(c *gin.Context) {
-	if err := db.PingContext(c.Request.Context()); err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status": "unavailable",
-		})
-		return
+	// Health checks.
+	// Health checks.
+	instanceID := os.Getenv("INSTANCE_ID")
+	if instanceID == "" {
+		instanceID = "local"
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":   "ok",
-		"database": "connected",
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":      "ok",
+			"instance_id": instanceID,
+		})
 	})
-})
 
-port := os.Getenv("PORT")
-if port == "" {
-    port = "8080"
-}
+	router.GET("/health/db", func(c *gin.Context) {
+		if err := db.PingContext(c.Request.Context()); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "error",
+			})
+			return
+		}
 
-if err := router.Run(":" + port); err != nil {
-    log.Fatalf("server failed: %v", err)
-}
+		c.JSON(http.StatusOK, gin.H{
+			"status":   "ok",
+			"database": "connected",
+		})
+	})
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	if err := router.Run(":" + port); err != nil {
+		log.Fatalf("server failed: %v", err)
+	}
 
 }
