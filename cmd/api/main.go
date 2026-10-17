@@ -136,8 +136,13 @@ router.GET("/health/db", func(c *gin.Context) {
 	})
 })
 
-if err := router.Run(":8080"); err != nil {
-	log.Fatalf("server failed: %v", err)
+port := os.Getenv("PORT")
+if port == "" {
+    port = "8080"
+}
+
+if err := router.Run(":" + port); err != nil {
+    log.Fatalf("server failed: %v", err)
 }
 
 }

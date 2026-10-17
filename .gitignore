@@ -5,3 +5,5 @@
 *.log
 tmp/
 bin/
+.go.mod
+.go.sum
