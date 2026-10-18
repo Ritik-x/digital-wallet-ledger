@@ -3,6 +3,7 @@ package transfer
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -50,7 +51,6 @@ func (r *PostgresRepository) Create(
 	}
 	defer tx.Rollback()
 
-	// Lock wallets in ascending ID order to reduce deadlocks.
 	walletIDs := []int64{
 		input.SenderWalletID,
 		input.ReceiverWalletID,
@@ -92,13 +92,10 @@ func (r *PostgresRepository) Create(
 	sender := wallets[input.SenderWalletID]
 	receiver := wallets[input.ReceiverWalletID]
 
-	// Only the owner of the sender wallet can initiate this transfer.
 	if sender.UserID != input.UserID {
 		return nil, ErrWalletNotFound
 	}
 
-	// Check for an already completed request BEFORE checking balance.
-	// A retry must not debit the sender a second time.
 	existing, err := findTransferByIdempotencyKey(
 		ctx,
 		tx,
@@ -194,7 +191,6 @@ func (r *PostgresRepository) Create(
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		// Another request may have inserted this key concurrently.
 		existing, lookupErr := findTransferByIdempotencyKey(
 			ctx,
 			tx,
@@ -212,9 +208,6 @@ func (r *PostgresRepository) Create(
 				lookupErr,
 			)
 		}
-
-		// The key exists, but is not associated with a transfer
-		// this user is authorized to view.
 		return nil, ErrIdempotencyConflict
 	}
 
@@ -240,7 +233,6 @@ func (r *PostgresRepository) Create(
 		return nil, fmt.Errorf("find sender ledger account: %w", err)
 	}
 
-	// Record the debit.
 	_, err = tx.ExecContext(
 		ctx,
 		`INSERT INTO ledger_entries (
@@ -297,10 +289,34 @@ func (r *PostgresRepository) Create(
 	}
 
 	// The transfer and both ledger entries commit together.
+	// Create a notification event inside the same transaction.
+	eventPayload, err := json.Marshal(map[string]interface{}{
+		"transfer_id":        transfer.ID,
+		"sender_wallet_id":   transfer.SenderWalletID,
+		"receiver_wallet_id": transfer.ReceiverWalletID,
+		"amount_minor":       transfer.AmountMinor,
+		"currency":           transfer.Currency,
+		"status":             transfer.Status,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal transfer event: %w", err)
+	}
+
+	_, err = tx.ExecContext(
+		ctx,
+		`INSERT INTO outbox_events (event_type, payload)
+     VALUES ($1, $2)`,
+		"transfer.completed",
+		eventPayload,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("insert transfer outbox event: %w", err)
+	}
+
+	// The transfer, ledger entries, and event commit together.
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit transfer: %w", err)
 	}
-
 	return &transfer, nil
 }
 

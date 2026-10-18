@@ -7,4 +7,4 @@ tmp/
 bin/
 
 go.mod
-go.sum
+go.sum/api

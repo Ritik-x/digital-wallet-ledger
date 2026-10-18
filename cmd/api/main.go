@@ -2,18 +2,18 @@ package main
 
 import (
 	"context"
-	"log"
-	"net/http"
-	"os"
-	"time"
-
 	"digital-wallet/internal/auth"
 	"digital-wallet/internal/database"
 	"digital-wallet/internal/deposit"
 	"digital-wallet/internal/history"
+	"digital-wallet/internal/messaging"
 	"digital-wallet/internal/ratelimit"
 	"digital-wallet/internal/transfer"
 	"digital-wallet/internal/wallet"
+	"log"
+	"net/http"
+	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -24,6 +24,32 @@ func main() {
 		log.Fatalf("database connection failed: %v", err)
 	}
 	defer db.Close()
+	rabbitConn, rabbitChannel, err := messaging.Connect()
+	if err != nil {
+		log.Fatalf("initialize RabbitMQ: %v", err)
+	}
+	defer rabbitChannel.Close()
+	defer rabbitConn.Close()
+
+	log.Println("RabbitMQ connected successfully")
+
+	queueName := os.Getenv("RABBITMQ_QUEUE")
+	outboxPublisher := messaging.NewOutboxPublisher(db, rabbitChannel, queueName)
+	publisherCtx, stopPublisher := context.WithCancel(context.Background())
+	defer stopPublisher()
+	go outboxPublisher.Start(publisherCtx)
+
+	log.Println("Outbox publisher started")
+
+	go func() {
+		if err := messaging.StartConsumer(
+			publisherCtx,
+			rabbitConn,
+			queueName,
+		); err != nil {
+			log.Printf("notification consumer stopped: %v", err)
+		}
+	}()
 
 	walletRepo := wallet.NewRepository(db)
 	walletService := wallet.NewService(walletRepo)
