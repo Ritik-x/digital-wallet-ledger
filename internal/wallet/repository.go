@@ -27,11 +27,18 @@ func NewRepository(db *sql.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
+
 func (r *PostgresRepository) Create(
 	ctx context.Context,
 	input CreateWalletInput,
 ) (*Wallet, error) {
-	const query = `
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin wallet creation transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	const insertWallet = `
 		INSERT INTO wallets (user_id, currency)
 		VALUES ($1, $2)
 		RETURNING id, user_id, currency, created_at
@@ -39,9 +46,9 @@ func (r *PostgresRepository) Create(
 
 	var wallet Wallet
 
-	err := r.db.QueryRowContext(
+	err = tx.QueryRowContext(
 		ctx,
-		query,
+		insertWallet,
 		input.UserID,
 		input.Currency,
 	).Scan(
@@ -50,20 +57,41 @@ func (r *PostgresRepository) Create(
 		&wallet.Currency,
 		&wallet.CreatedAt,
 	)
-
 	if err != nil {
 		var pgErr *pgconn.PgError
-
-		if errors.As(err, &pgErr) &&
-			pgErr.Code == "23503" {
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
 			return nil, ErrUserNotFound
 		}
-
 		return nil, fmt.Errorf("create wallet: %w", err)
+	}
+
+	const insertLedgerAccount = `
+		INSERT INTO ledger_accounts (
+			account_type,
+			wallet_id,
+			currency,
+			status
+		)
+		VALUES ('wallet', $1, $2, 'active')
+	`
+
+	_, err = tx.ExecContext(
+		ctx,
+		insertLedgerAccount,
+		wallet.ID,
+		wallet.Currency,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create wallet ledger account: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit wallet creation: %w", err)
 	}
 
 	return &wallet, nil
 }
+
 
 func (r *PostgresRepository) GetBalance(
 	ctx context.Context,

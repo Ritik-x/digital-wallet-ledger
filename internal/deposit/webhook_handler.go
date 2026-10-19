@@ -3,6 +3,7 @@ package deposit
 import (
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"os"
 
@@ -63,6 +64,12 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 		event.AmountMinor,
 		event.Currency,
 	); err != nil {
+
+		log.Printf(
+			"payment confirmation failed for deposit_id=%d: %v",
+			event.DepositID,
+			err,
+		)
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "payment confirmation failed"})
 		return
 	}
