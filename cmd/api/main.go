@@ -63,6 +63,16 @@ func main() {
 	depositService := deposit.NewService(depositRepo)
 	depositHandler := deposit.NewHandler(depositService)
 
+	webhookSecret := os.Getenv("MOCK_PAYMENT_WEBHOOK_SECRET")
+	if len(webhookSecret) < 32 {
+		log.Fatal("MOCK_PAYMENT_WEBHOOK_SECRET must be at least 32 characters")
+	}
+
+	webhookHandler := deposit.NewWebhookHandler(
+		depositService,
+		webhookSecret,
+	)
+
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if len(jwtSecret) < 32 {
 		log.Fatal("JWT_SECRET must be configured with at least 32 characters")
@@ -83,6 +93,7 @@ func main() {
 	depositReversalRepo := deposit.NewPostgresReversalRepository(db)
 	depositReversalService := deposit.NewReversalService(depositReversalRepo)
 	depositReversalHandler := deposit.NewReversalHandler(depositReversalService)
+
 	startupCtx, cancel := context.WithTimeout(
 		context.Background(),
 		5*time.Second,
@@ -99,7 +110,7 @@ func main() {
 	router := gin.Default()
 
 	api := router.Group("/api/v1")
-
+	api.POST("/webhooks/mock-payment", webhookHandler.Handle)
 	// Initialize rate limiting for all API routes.
 	authRoutes := api.Group("/auth")
 	authRoutes.Use(ratelimit.Middleware(

@@ -51,3 +51,36 @@ func (s *Service) Create(
 
 	return s.repo.Create(ctx, input)
 }
+
+func (s *Service) ConfirmPayment(
+	ctx context.Context,
+	depositID int64,
+	amountMinor int64,
+	currency string,
+) error {
+	if depositID <= 0 {
+		return errors.New("invalid deposit ID")
+	}
+
+	if amountMinor <= 0 {
+		return errors.New("amount must be positive")
+	}
+
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+	if len(currency) != 3 {
+		return errors.New("currency must be a three-letter code")
+	}
+
+	for _, ch := range currency {
+		if ch < 'A' || ch > 'Z' {
+			return errors.New("currency must contain only letters")
+		}
+	}
+
+	return s.repo.ConfirmPayment(
+		ctx,
+		depositID,
+		amountMinor,
+		currency,
+	)
+}
