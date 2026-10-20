@@ -20,7 +20,24 @@ func NewReversalHandler(service *ReversalService) *ReversalHandler {
 	}
 }
 
+// Reverse godoc
+// @Summary Reverse a deposit
+// @Description Reverses an eligible deposit, subject to authorization and sufficient wallet funds.
+// @Tags Deposits
+// @Security BearerAuth
+// @Produce json
+// @Param id path int true "Deposit ID"
+// @Param Idempotency-Key header string true "Unique key for this reversal request"
+// @Success 200 {object} map[string]interface{} "Deposit reversed"
+// @Failure 400 {object} map[string]interface{} "Invalid deposit ID or missing idempotency key"
+// @Failure 401 {object} map[string]interface{} "Authentication required"
+// @Failure 404 {object} map[string]interface{} "Deposit not found"
+// @Failure 409 {object} map[string]interface{} "Deposit cannot be reversed or idempotency conflict"
+// @Failure 422 {object} map[string]interface{} "Insufficient funds for reversal"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /api/v1/deposits/{id}/reverse [post]
 func (h *ReversalHandler) Reverse(c *gin.Context) {
+
 	userID, ok := auth.UserIDFromContext(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{

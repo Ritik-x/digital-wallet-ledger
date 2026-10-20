@@ -22,14 +22,28 @@ func NewWebhookHandler(service *Service, secret string) *WebhookHandler {
 	}
 }
 
-type paymentWebhookRequest struct {
+type PaymentWebhookRequest struct {
 	DepositID   int64  `json:"deposit_id"`
 	Status      string `json:"status"`
 	AmountMinor int64  `json:"amount_minor"`
 	Currency    string `json:"currency"`
 }
 
+// Handle godoc
+// @Summary Handle a mock payment webhook
+// @Description Verifies the HMAC signature and processes a successful payment event for a deposit.
+// @Tags Payment Webhooks
+// @Accept json
+// @Produce json
+// @Param X-Webhook-Signature header string true "HMAC signature of the exact request body"
+// @Param request body PaymentWebhookRequest true "Payment event"
+// @Success 200 {object} map[string]interface{} "Webhook received"
+// @Failure 400 {object} map[string]interface{} "Invalid body or payment event"
+// @Failure 401 {object} map[string]interface{} "Invalid webhook signature"
+// @Failure 422 {object} map[string]interface{} "Payment confirmation failed"
+// @Router /api/v1/webhooks/mock-payment [post]
 func (h *WebhookHandler) Handle(c *gin.Context) {
+
 	// Read the exact request bytes before decoding JSON.
 	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
 	if err != nil {
@@ -42,8 +56,7 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid webhook signature"})
 		return
 	}
-
-	var event paymentWebhookRequest
+	var event PaymentWebhookRequest
 	if err := json.Unmarshal(body, &event); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid webhook JSON"})
 		return

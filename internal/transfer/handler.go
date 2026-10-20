@@ -17,15 +17,32 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-type createTransferRequest struct {
+type CreateTransferRequest struct {
 	SenderWalletID   int64  `json:"sender_wallet_id" binding:"required,gt=0"`
 	ReceiverWalletID int64  `json:"receiver_wallet_id" binding:"required,gt=0"`
 	AmountMinor      int64  `json:"amount_minor" binding:"required,gt=0"`
 	Currency         string `json:"currency" binding:"required,len=3"`
 }
 
+// CreateTransfer godoc
+// @Summary Create a wallet transfer
+// @Description Transfers funds between two wallets. Amount is expressed in minor currency units (paise for INR).
+// @Tags Transfers
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param Idempotency-Key header string true "Unique key for this transfer request"
+// @Param request body CreateTransferRequest true "Transfer details"
+// @Success 201 {object} map[string]interface{} "Transfer created"
+// @Failure 400 {object} map[string]interface{} "Invalid request or missing idempotency key"
+// @Failure 401 {object} map[string]interface{} "Authentication required"
+// @Failure 404 {object} map[string]interface{} "Wallet not found"
+// @Failure 409 {object} map[string]interface{} "Wallet unavailable or idempotency conflict"
+// @Failure 422 {object} map[string]interface{} "Currency mismatch or insufficient funds"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /api/v1/transfers [post]
 func (h *Handler) CreateTransfer(c *gin.Context) {
-	var req createTransferRequest
+	var req CreateTransferRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{

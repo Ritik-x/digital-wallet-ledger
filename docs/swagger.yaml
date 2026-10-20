@@ -1,0 +1,590 @@
+basePath: /
+definitions:
+  auth.CredentialsRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  deposit.CreateDepositRequest:
+    properties:
+      amount_minor:
+        type: integer
+      currency:
+        type: string
+      wallet_id:
+        type: integer
+    required:
+    - amount_minor
+    - currency
+    - wallet_id
+    type: object
+  deposit.PaymentWebhookRequest:
+    properties:
+      amount_minor:
+        type: integer
+      currency:
+        type: string
+      deposit_id:
+        type: integer
+      status:
+        type: string
+    type: object
+  transfer.CreateTransferRequest:
+    properties:
+      amount_minor:
+        type: integer
+      currency:
+        type: string
+      receiver_wallet_id:
+        type: integer
+      sender_wallet_id:
+        type: integer
+    required:
+    - amount_minor
+    - currency
+    - receiver_wallet_id
+    - sender_wallet_id
+    type: object
+  wallet.CreateWalletRequest:
+    properties:
+      currency:
+        type: string
+    required:
+    - currency
+    type: object
+info:
+  contact: {}
+  description: Digital wallet and double-entry ledger API.
+  title: LedgerX API
+  version: "1.0"
+paths:
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates a user and returns a JWT access token.
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.CredentialsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Access token
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Invalid credentials
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Log in
+      tags:
+      - Authentication
+  /api/v1/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a user account.
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.CredentialsRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Register a new user
+      tags:
+      - Authentication
+  /api/v1/deposits:
+    post:
+      consumes:
+      - application/json
+      description: Credits an eligible wallet through the deposit service. Amount
+        is expressed in minor currency units (paise for INR).
+      parameters:
+      - description: Unique key for this deposit request
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Deposit details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/deposit.CreateDepositRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Deposit created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid request or missing idempotency key
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Wallet not found
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Wallet unavailable or idempotency conflict
+          schema:
+            additionalProperties: true
+            type: object
+        "422":
+          description: Currency mismatch
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create a deposit
+      tags:
+      - Deposits
+  /api/v1/deposits/{id}/reverse:
+    post:
+      description: Reverses an eligible deposit, subject to authorization and sufficient
+        wallet funds.
+      parameters:
+      - description: Deposit ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Unique key for this reversal request
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Deposit reversed
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid deposit ID or missing idempotency key
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Authentication required
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Deposit not found
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Deposit cannot be reversed or idempotency conflict
+          schema:
+            additionalProperties: true
+            type: object
+        "422":
+          description: Insufficient funds for reversal
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reverse a deposit
+      tags:
+      - Deposits
+  /api/v1/transfers:
+    post:
+      consumes:
+      - application/json
+      description: Transfers funds between two wallets. Amount is expressed in minor
+        currency units (paise for INR).
+      parameters:
+      - description: Unique key for this transfer request
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Transfer details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/transfer.CreateTransferRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Transfer created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid request or missing idempotency key
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Authentication required
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Wallet not found
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Wallet unavailable or idempotency conflict
+          schema:
+            additionalProperties: true
+            type: object
+        "422":
+          description: Currency mismatch or insufficient funds
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a wallet transfer
+      tags:
+      - Transfers
+  /api/v1/transfers/{id}/reverse:
+    post:
+      description: Reverses an eligible transfer, subject to authorization and available
+        funds.
+      parameters:
+      - description: Transfer ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Unique key for this reversal request
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transfer reversed
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid transfer ID or missing idempotency key
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Authentication required
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Transfer not found
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Transfer cannot be reversed or idempotency conflict
+          schema:
+            additionalProperties: true
+            type: object
+        "422":
+          description: Receiver has insufficient funds for reversal
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reverse a transfer
+      tags:
+      - Transfers
+  /api/v1/wallets:
+    post:
+      consumes:
+      - application/json
+      description: Creates a wallet for the authenticated user.
+      parameters:
+      - description: Wallet details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/wallet.CreateWalletRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Wallet created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Authentication required
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: User not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a wallet
+      tags:
+      - Wallets
+  /api/v1/wallets/{id}/balance:
+    get:
+      description: Retrieves the ledger-derived balance for a wallet.
+      parameters:
+      - description: Wallet ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Wallet balance
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid wallet ID
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Authentication required
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Wallet not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get wallet balance
+      tags:
+      - Wallets
+  /api/v1/wallets/{id}/transactions:
+    get:
+      description: Retrieves paginated transaction history for a wallet belonging
+        to the authenticated user.
+      parameters:
+      - description: Wallet ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - default: 20
+        description: Maximum number of transactions to return
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of transactions to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Transaction history
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid wallet ID, limit, or offset
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Authentication required
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List wallet transactions
+      tags:
+      - Transaction History
+  /api/v1/webhooks/mock-payment:
+    post:
+      consumes:
+      - application/json
+      description: Verifies the HMAC signature and processes a successful payment
+        event for a deposit.
+      parameters:
+      - description: HMAC signature of the exact request body
+        in: header
+        name: X-Webhook-Signature
+        required: true
+        type: string
+      - description: Payment event
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/deposit.PaymentWebhookRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Webhook received
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid body or payment event
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Invalid webhook signature
+          schema:
+            additionalProperties: true
+            type: object
+        "422":
+          description: Payment confirmation failed
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Handle a mock payment webhook
+      tags:
+      - Payment Webhooks
+  /health:
+    get:
+      description: Returns the API status and instance ID.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: API is healthy
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Check API health
+      tags:
+      - Health
+  /health/db:
+    get:
+      description: Checks database connectivity using a ping.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Database is connected
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: Database is unavailable
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Check database health
+      tags:
+      - Health
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

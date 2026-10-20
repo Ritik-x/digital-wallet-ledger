@@ -18,7 +18,22 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
+// List godoc
+// @Summary List wallet transactions
+// @Description Retrieves paginated transaction history for a wallet belonging to the authenticated user.
+// @Tags Transaction History
+// @Security BearerAuth
+// @Produce json
+// @Param id path int true "Wallet ID"
+// @Param limit query int false "Maximum number of transactions to return" default(20)
+// @Param offset query int false "Number of transactions to skip" default(0)
+// @Success 200 {object} map[string]interface{} "Transaction history"
+// @Failure 400 {object} map[string]interface{} "Invalid wallet ID, limit, or offset"
+// @Failure 401 {object} map[string]interface{} "Authentication required"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /api/v1/wallets/{id}/transactions [get]
 func (h *Handler) List(c *gin.Context) {
+
 	userID, ok := auth.UserIDFromContext(c)
 	if !ok || userID <= 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{

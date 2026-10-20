@@ -15,13 +15,25 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-type credentialsRequest struct {
+type CredentialsRequest struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
+// Register godoc
+// @Summary Register a new user
+// @Description Creates a user account.
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param request body CredentialsRequest true "Login credentials"
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 409 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/auth/register [post]
 func (h *Handler) Register(c *gin.Context) {
-	var req credentialsRequest
+	var req CredentialsRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -57,8 +69,20 @@ func (h *Handler) Register(c *gin.Context) {
 	c.JSON(http.StatusCreated, user)
 }
 
+// Login godoc
+// @Summary      Log in
+// @Description  Authenticates a user and returns a JWT access token.
+// @Tags         Authentication
+// @Accept       json
+// @Produce      json
+// @Param request body CredentialsRequest true "Login credentials"
+// @Success      200 {object} map[string]interface{} "Access token"
+// @Failure      400 {object} map[string]interface{} "Invalid request"
+// @Failure      401 {object} map[string]interface{} "Invalid credentials"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /api/v1/auth/login [post]
 func (h *Handler) Login(c *gin.Context) {
-	var req credentialsRequest
+	var req CredentialsRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{

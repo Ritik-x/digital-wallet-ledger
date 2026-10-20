@@ -1,7 +1,15 @@
+// @title           LedgerX API
+// @version         1.0
+// @description     Digital wallet and double-entry ledger API.
+// @BasePath        /
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 package main
 
 import (
 	"context"
+	"database/sql"
 	"digital-wallet/internal/auth"
 	"digital-wallet/internal/database"
 	"digital-wallet/internal/deposit"
@@ -16,7 +24,11 @@ import (
 	"os"
 	"time"
 
+	_ "digital-wallet/docs"
+
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
@@ -153,6 +165,13 @@ func main() {
 	// Configure Gin.
 	router := gin.Default()
 
+	// Swagger documentation UI.
+	router.GET(
+		"/swagger/*any",
+		ginSwagger.WrapHandler(swaggerFiles.Handler),
+	)
+
+	// API routes.
 	api := router.Group("/api/v1")
 
 	// Mock payment provider webhook.
@@ -171,7 +190,6 @@ func main() {
 			"ratelimit:auth",
 		),
 	)
-
 	authRoutes.POST("/register", authHandler.Register)
 	authRoutes.POST("/login", authHandler.Login)
 
@@ -207,31 +225,17 @@ func main() {
 		historyHandler.List,
 	)
 
-	// Health checks.
+	// Health checks are intentionally outside /api/v1.
 	instanceID := os.Getenv("INSTANCE_ID")
 	if instanceID == "" {
 		instanceID = "local"
 	}
 
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":      "ok",
-			"instance_id": instanceID,
-		})
+		healthCheck(c, instanceID)
 	})
-
 	router.GET("/health/db", func(c *gin.Context) {
-		if err := db.PingContext(c.Request.Context()); err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status": "error",
-			})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"status":   "ok",
-			"database": "connected",
-		})
+		databaseHealthCheck(c, db)
 	})
 
 	// Start the HTTP server.
@@ -245,4 +249,40 @@ func main() {
 	if err := router.Run(":" + port); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
+}
+
+// HealthCheck godoc
+// @Summary Check API health
+// @Description Returns the API status and instance ID.
+// @Tags Health
+// @Produce json
+// @Success 200 {object} map[string]interface{} "API is healthy"
+// @Router /health [get]
+func healthCheck(c *gin.Context, instanceID string) {
+	c.JSON(http.StatusOK, gin.H{
+		"status":      "ok",
+		"instance_id": instanceID,
+	})
+}
+
+// DatabaseHealthCheck godoc
+// @Summary Check database health
+// @Description Checks database connectivity using a ping.
+// @Tags Health
+// @Produce json
+// @Success 200 {object} map[string]interface{} "Database is connected"
+// @Failure 503 {object} map[string]interface{} "Database is unavailable"
+// @Router /health/db [get]
+func databaseHealthCheck(c *gin.Context, db *sql.DB) {
+	if err := db.PingContext(c.Request.Context()); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status": "error",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":   "ok",
+		"database": "connected",
+	})
 }
