@@ -280,8 +280,7 @@ func (r *PostgresReversalRepository) Reverse(
 		return nil, fmt.Errorf("create reversal record: %w", err)
 	}
 
-	// Reverse the original movement:
-	// credit the sender, debit the receiver.
+	
 	_, err = tx.ExecContext(
 		ctx,
 		`

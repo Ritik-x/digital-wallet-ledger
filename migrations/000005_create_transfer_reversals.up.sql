@@ -1,5 +1,4 @@
 
--- Store each reversal as a separate, auditable operation.
 CREATE TABLE transfer_reversals (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 
@@ -18,7 +17,7 @@ ALTER TABLE ledger_entries
         REFERENCES transfer_reversals(id);
 
 -- Every ledger entry must belong to exactly one operation:
--- transfer, deposit, or reversal.
+
 ALTER TABLE ledger_entries
     DROP CONSTRAINT ledger_entry_one_operation;
 
