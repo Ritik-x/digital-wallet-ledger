@@ -16,20 +16,20 @@ func NewHandler(service *Service) *Handler {
 }
 
 type CreateDepositRequest struct {
-	WalletID    int64  `json:"wallet_id" binding:"required,gt=0"`
-	AmountMinor int64  `json:"amount_minor" binding:"required,gt=0"`
-	Currency    string `json:"currency" binding:"required,len=3"`
+    WalletID    int64  `json:"wallet_id" binding:"required,gt=0" minimum:"1"`
+    AmountMinor int64  `json:"amount_minor" binding:"required,gt=0" minimum:"1"`
+    Currency    string `json:"currency" binding:"required,len=3" minLength:"3" maxLength:"3"`
 }
-
 // CreateDeposit godoc
 // @Summary Create a deposit
 // @Description Credits an eligible wallet through the deposit service. Amount is expressed in minor currency units (paise for INR).
 // @Tags Deposits
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param Idempotency-Key header string true "Unique key for this deposit request"
 // @Param request body CreateDepositRequest true "Deposit details"
-// @Success 201 {object} map[string]interface{} "Deposit created"
+// @Success 201 {object} Deposit "Deposit created"
 // @Failure 400 {object} map[string]interface{} "Invalid request or missing idempotency key"
 // @Failure 404 {object} map[string]interface{} "Wallet not found"
 // @Failure 409 {object} map[string]interface{} "Wallet unavailable or idempotency conflict"

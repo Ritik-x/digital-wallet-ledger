@@ -13,15 +13,45 @@ definitions:
   deposit.CreateDepositRequest:
     properties:
       amount_minor:
+        minimum: 1
         type: integer
       currency:
+        maxLength: 3
+        minLength: 3
         type: string
       wallet_id:
+        minimum: 1
         type: integer
     required:
     - amount_minor
     - currency
     - wallet_id
+    type: object
+  deposit.Deposit:
+    properties:
+      amount_minor:
+        type: integer
+      created_at:
+        type: string
+      currency:
+        type: string
+      id:
+        type: integer
+      idempotency_key:
+        type: string
+      status:
+        type: string
+      wallet_id:
+        type: integer
+    type: object
+  deposit.DepositReversal:
+    properties:
+      created_at:
+        type: string
+      deposit_id:
+        type: integer
+      id:
+        type: integer
     type: object
   deposit.PaymentWebhookRequest:
     properties:
@@ -32,6 +62,45 @@ definitions:
       deposit_id:
         type: integer
       status:
+        type: string
+    type: object
+  deposit.WebhookResponse:
+    properties:
+      status:
+        example: received
+        type: string
+    type: object
+  history.ListResult:
+    properties:
+      has_more:
+        type: boolean
+      limit:
+        type: integer
+      offset:
+        type: integer
+      transactions:
+        items:
+          $ref: '#/definitions/history.Transaction'
+        type: array
+      wallet_id:
+        type: integer
+    type: object
+  history.Transaction:
+    properties:
+      amount_minor:
+        type: integer
+      counterparty_wallet_id:
+        type: integer
+      created_at:
+        format: date-time
+        type: string
+      currency:
+        type: string
+      id:
+        type: integer
+      status:
+        type: string
+      type:
         type: string
     type: object
   transfer.CreateTransferRequest:
@@ -50,12 +119,58 @@ definitions:
     - receiver_wallet_id
     - sender_wallet_id
     type: object
+  transfer.Transfer:
+    properties:
+      amount_minor:
+        type: integer
+      created_at:
+        type: string
+      currency:
+        type: string
+      id:
+        type: integer
+      receiver_wallet_id:
+        type: integer
+      sender_wallet_id:
+        type: integer
+      status:
+        type: string
+    type: object
+  transfer.TransferReversal:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      transfer_id:
+        type: integer
+    type: object
+  wallet.Balance:
+    properties:
+      balance_minor:
+        type: integer
+      currency:
+        type: string
+      wallet_id:
+        type: integer
+    type: object
   wallet.CreateWalletRequest:
     properties:
       currency:
         type: string
     required:
     - currency
+    type: object
+  wallet.Wallet:
+    properties:
+      created_at:
+        type: string
+      currency:
+        type: string
+      id:
+        type: integer
+      user_id:
+        type: integer
     type: object
 info:
   contact: {}
@@ -163,8 +278,7 @@ paths:
         "201":
           description: Deposit created
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/deposit.Deposit'
         "400":
           description: Invalid request or missing idempotency key
           schema:
@@ -190,6 +304,8 @@ paths:
           schema:
             additionalProperties: true
             type: object
+      security:
+      - BearerAuth: []
       summary: Create a deposit
       tags:
       - Deposits
@@ -214,8 +330,7 @@ paths:
         "200":
           description: Deposit reversed
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/deposit.DepositReversal'
         "400":
           description: Invalid deposit ID or missing idempotency key
           schema:
@@ -275,8 +390,7 @@ paths:
         "201":
           description: Transfer created
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/transfer.Transfer'
         "400":
           description: Invalid request or missing idempotency key
           schema:
@@ -333,8 +447,7 @@ paths:
         "200":
           description: Transfer reversed
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/transfer.TransferReversal'
         "400":
           description: Invalid transfer ID or missing idempotency key
           schema:
@@ -388,8 +501,7 @@ paths:
         "201":
           description: Wallet created
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/wallet.Wallet'
         "400":
           description: Invalid request
           schema:
@@ -430,8 +542,7 @@ paths:
         "200":
           description: Wallet balance
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/wallet.Balance'
         "400":
           description: Invalid wallet ID
           schema:
@@ -483,8 +594,7 @@ paths:
         "200":
           description: Transaction history
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/history.ListResult'
         "400":
           description: Invalid wallet ID, limit, or offset
           schema:
@@ -529,8 +639,7 @@ paths:
         "200":
           description: Webhook received
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/deposit.WebhookResponse'
         "400":
           description: Invalid body or payment event
           schema:

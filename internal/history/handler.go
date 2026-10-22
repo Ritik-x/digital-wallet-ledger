@@ -27,7 +27,7 @@ func NewHandler(service *Service) *Handler {
 // @Param id path int true "Wallet ID"
 // @Param limit query int false "Maximum number of transactions to return" default(20)
 // @Param offset query int false "Number of transactions to skip" default(0)
-// @Success 200 {object} map[string]interface{} "Transaction history"
+// @Success 200 {object} ListResult "Transaction history"
 // @Failure 400 {object} map[string]interface{} "Invalid wallet ID, limit, or offset"
 // @Failure 401 {object} map[string]interface{} "Authentication required"
 // @Failure 500 {object} map[string]interface{} "Internal server error"

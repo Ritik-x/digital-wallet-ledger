@@ -14,6 +14,9 @@ type WebhookHandler struct {
 	service *Service
 	secret  string
 }
+type WebhookResponse struct {
+    Status string `json:"status" example:"received"`
+}
 
 func NewWebhookHandler(service *Service, secret string) *WebhookHandler {
 	return &WebhookHandler{
@@ -37,7 +40,7 @@ type PaymentWebhookRequest struct {
 // @Produce json
 // @Param X-Webhook-Signature header string true "HMAC signature of the exact request body"
 // @Param request body PaymentWebhookRequest true "Payment event"
-// @Success 200 {object} map[string]interface{} "Webhook received"
+// @Success 200 {object} WebhookResponse "Webhook received"
 // @Failure 400 {object} map[string]interface{} "Invalid body or payment event"
 // @Failure 401 {object} map[string]interface{} "Invalid webhook signature"
 // @Failure 422 {object} map[string]interface{} "Payment confirmation failed"

@@ -33,7 +33,7 @@ type CreateTransferRequest struct {
 // @Produce json
 // @Param Idempotency-Key header string true "Unique key for this transfer request"
 // @Param request body CreateTransferRequest true "Transfer details"
-// @Success 201 {object} map[string]interface{} "Transfer created"
+// @Success 201 {object} Transfer "Transfer created"
 // @Failure 400 {object} map[string]interface{} "Invalid request or missing idempotency key"
 // @Failure 401 {object} map[string]interface{} "Authentication required"
 // @Failure 404 {object} map[string]interface{} "Wallet not found"

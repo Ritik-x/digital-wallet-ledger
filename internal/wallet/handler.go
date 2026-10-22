@@ -31,7 +31,7 @@ type CreateWalletRequest struct {
 // @Accept json
 // @Produce json
 // @Param request body CreateWalletRequest true "Wallet details"
-// @Success 201 {object} map[string]interface{} "Wallet created"
+// @Success 201 {object} Wallet "Wallet created"
 // @Failure 400 {object} map[string]interface{} "Invalid request"
 // @Failure 401 {object} map[string]interface{} "Authentication required"
 // @Failure 404 {object} map[string]interface{} "User not found"
@@ -96,7 +96,7 @@ func (h *Handler) CreateWallet(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param id path int true "Wallet ID"
-// @Success 200 {object} map[string]interface{} "Wallet balance"
+// @Success 200 {object} Balance "Wallet balance"
 // @Failure 400 {object} map[string]interface{} "Invalid wallet ID"
 // @Failure 401 {object} map[string]interface{} "Authentication required"
 // @Failure 404 {object} map[string]interface{} "Wallet not found"

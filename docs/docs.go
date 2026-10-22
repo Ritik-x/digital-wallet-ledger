@@ -129,6 +129,11 @@ const docTemplate = `{
         },
         "/api/v1/deposits": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Credits an eligible wallet through the deposit service. Amount is expressed in minor currency units (paise for INR).",
                 "consumes": [
                     "application/json"
@@ -162,8 +167,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Deposit created",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/deposit.Deposit"
                         }
                     },
                     "400": {
@@ -239,8 +243,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Deposit reversed",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/deposit.DepositReversal"
                         }
                     },
                     "400": {
@@ -328,8 +331,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Transfer created",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/transfer.Transfer"
                         }
                     },
                     "400": {
@@ -412,8 +414,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Transfer reversed",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/transfer.TransferReversal"
                         }
                     },
                     "400": {
@@ -494,8 +495,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Wallet created",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/wallet.Wallet"
                         }
                     },
                     "400": {
@@ -557,8 +557,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Wallet balance",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/wallet.Balance"
                         }
                     },
                     "400": {
@@ -634,8 +633,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Transaction history",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/history.ListResult"
                         }
                     },
                     "400": {
@@ -697,8 +695,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Webhook received",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/deposit.WebhookResponse"
                         }
                     },
                     "400": {
@@ -800,12 +797,56 @@ const docTemplate = `{
             ],
             "properties": {
                 "amount_minor": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "currency": {
+                    "type": "string",
+                    "maxLength": 3,
+                    "minLength": 3
+                },
+                "wallet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
+        "deposit.Deposit": {
+            "type": "object",
+            "properties": {
+                "amount_minor": {
                     "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
                 },
                 "currency": {
                     "type": "string"
                 },
+                "id": {
+                    "type": "integer"
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
                 "wallet_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "deposit.DepositReversal": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "deposit_id": {
+                    "type": "integer"
+                },
+                "id": {
                     "type": "integer"
                 }
             }
@@ -823,6 +864,65 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "deposit.WebhookResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "received"
+                }
+            }
+        },
+        "history.ListResult": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "transactions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/history.Transaction"
+                    }
+                },
+                "wallet_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "history.Transaction": {
+            "type": "object",
+            "properties": {
+                "amount_minor": {
+                    "type": "integer"
+                },
+                "counterparty_wallet_id": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 }
             }
@@ -850,6 +950,60 @@ const docTemplate = `{
                 }
             }
         },
+        "transfer.Transfer": {
+            "type": "object",
+            "properties": {
+                "amount_minor": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "receiver_wallet_id": {
+                    "type": "integer"
+                },
+                "sender_wallet_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "transfer.TransferReversal": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "transfer_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "wallet.Balance": {
+            "type": "object",
+            "properties": {
+                "balance_minor": {
+                    "type": "integer"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "wallet_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "wallet.CreateWalletRequest": {
             "type": "object",
             "required": [
@@ -858,6 +1012,23 @@ const docTemplate = `{
             "properties": {
                 "currency": {
                     "type": "string"
+                }
+            }
+        },
+        "wallet.Wallet": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         }

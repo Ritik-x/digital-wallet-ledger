@@ -10,7 +10,7 @@ ID                  int64     `json:"id"`
 	Currency            string    `json:"currency"`
 	Status              string    `json:"status"`
 	CounterpartyWalletID *int64   `json:"counterparty_wallet_id"`
-	CreatedAt           time.Time `json:"created_at"`
+	CreatedAt time.Time `json:"created_at" format:"date-time"`
 }
 
 // ListInput contains the filters for retrieving transaction history.
