@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/XSAM/otelsql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 )
@@ -29,7 +30,7 @@ func Connect() (*sql.DB, error) {
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		host, port, user, password, dbName, sslMode,
 	)
-	db, err := sql.Open("pgx", dsn)
+	db, err := otelsql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}

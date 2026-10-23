@@ -16,6 +16,7 @@ import (
 	"digital-wallet/internal/history"
 	"digital-wallet/internal/messaging"
 	"digital-wallet/internal/notification"
+	"digital-wallet/internal/observability"
 	"digital-wallet/internal/ratelimit"
 	"digital-wallet/internal/transfer"
 	"digital-wallet/internal/wallet"
@@ -29,9 +30,30 @@ import (
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 func main() {
+	// Initialize distributed tracing.
+	tracingShutdown, err := observability.InitTracing(
+		context.Background(),
+	)
+	if err != nil {
+		log.Fatalf("initialize tracing: %v", err)
+	}
+
+	defer func() {
+		ctx, cancel := context.WithTimeout(
+			context.Background(),
+			5*time.Second,
+		)
+		defer cancel()
+
+		if err := tracingShutdown(ctx); err != nil {
+			log.Printf("shutdown tracing: %v", err)
+		}
+	}()
+
 	// Initialize PostgreSQL.
 	db, err := database.Connect()
 	if err != nil {
@@ -162,14 +184,24 @@ func main() {
 		depositReversalService,
 	)
 
-	// Configure Gin.
-	router := gin.Default()
+	// Configure structured logging.
+	logger := observability.NewLogger()
+
+	// Configure Gin middleware.
+	router := gin.New()
+	router.Use(
+		gin.Recovery(),
+		otelgin.Middleware("ledgerx"),
+		observability.RequestLoger(logger),
+		observability.MetricsMiddleware(),
+	)
 
 	// Swagger documentation UI.
 	router.GET(
 		"/swagger/*any",
 		ginSwagger.WrapHandler(swaggerFiles.Handler),
 	)
+	router.GET("/metrics", observability.MetricsHandler())
 
 	// API routes.
 	api := router.Group("/api/v1")
@@ -225,7 +257,7 @@ func main() {
 		historyHandler.List,
 	)
 
-	// Health checks are intentionally outside /api/v1.
+	// Health checks.
 	instanceID := os.Getenv("INSTANCE_ID")
 	if instanceID == "" {
 		instanceID = "local"

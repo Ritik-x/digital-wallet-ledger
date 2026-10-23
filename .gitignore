@@ -1,10 +1,20 @@
+
+# Environment secrets
 .env
 .env.*
 !.env.example
+
+# OS and logs
 .DS_Store
 *.log
-tmp/
-bin/
 
-go.mod
-go.sum/api
+# Build artifacts
+/bin/
+/api
+
+# Local runtime data
+/data/
+
+# IDE
+.vscode/
+.idea/
