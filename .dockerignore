@@ -1,0 +1,12 @@
+
+.git
+.env
+.env.*
+!.env.example
+.DS_Store
+tmp/
+data/
+bin/
+api
+wallet_backup.sql
+*.log
