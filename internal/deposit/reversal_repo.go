@@ -11,7 +11,7 @@ var (
 	ErrDepositNotFound                    = errors.New("deposit not found")
 	ErrDepositAlreadyReversed             = errors.New("deposit already reversed")
 	ErrDepositNotReversible               = errors.New("deposit is not reversible")
-	ErrDepositReversalInsufficientFunds    = errors.New("wallet has insufficient funds for reversal")
+	ErrDepositReversalInsufficientFunds   = errors.New("wallet has insufficient funds for reversal")
 	ErrDepositReversalIdempotencyConflict = errors.New("idempotency key already used for another reversal")
 	ErrDepositWalletUnavailable           = errors.New("wallet or ledger account is unavailable")
 )

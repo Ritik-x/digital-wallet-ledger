@@ -15,7 +15,7 @@ type WebhookHandler struct {
 	secret  string
 }
 type WebhookResponse struct {
-    Status string `json:"status" example:"received"`
+	Status string `json:"status" example:"received"`
 }
 
 func NewWebhookHandler(service *Service, secret string) *WebhookHandler {

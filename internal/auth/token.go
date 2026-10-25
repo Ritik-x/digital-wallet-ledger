@@ -14,11 +14,10 @@ var (
 )
 
 type Claims struct {
-	UserID int64 `json:"user_id"`
+	UserID int64  `json:"user_id"`
 	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
-
 
 func GenerateToken(
 	userID int64,
@@ -86,17 +85,16 @@ func ParseToken(
 		return nil, ErrInvalidToken
 	}
 
-	
 	if claims.UserID <= 0 ||
 		claims.Subject != strconv.FormatInt(claims.UserID, 10) {
 		return nil, ErrInvalidToken
 	}
 
 	if claims.Role != "customer" &&
-    claims.Role != "support" &&
-    claims.Role != "admin" {
-    return nil, errors.New("invalid user role")
-}
+		claims.Role != "support" &&
+		claims.Role != "admin" {
+		return nil, errors.New("invalid user role")
+	}
 
 	return claims, nil
 }

@@ -13,9 +13,9 @@ import (
 var ErrEmailAlreadyExists = errors.New("email already registered")
 
 type User struct {
-	ID           int64  `json:"id"`
-	Email        string `json:"email"`
-	PasswordHash string `json:"-"`
+	ID           int64     `json:"id"`
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"-"`
 	Role         string    `json:"role"`
 	CreatedAt    time.Time `json:"created_at"`
 }
@@ -46,8 +46,8 @@ func (r *PostgresUserRepository) Create(
 		 RETURNING id, email, password_hash ,role ,created_at `,
 		email,
 		passwordHash,
-	).Scan(&user.ID, &user.Email, &user.PasswordHash , &user.Role,
-    &user.CreatedAt,)
+	).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.Role,
+		&user.CreatedAt)
 
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -87,35 +87,33 @@ func (r *PostgresUserRepository) Create(
 // 	return &user, nil
 // }
 
-
-
 func (r *PostgresUserRepository) GetByEmail(
-    ctx context.Context,
-    email string,
+	ctx context.Context,
+	email string,
 ) (*User, error) {
-    var user User
+	var user User
 
-    err := r.db.QueryRowContext(
-        ctx,
-        `SELECT id, email, password_hash, role, created_at
+	err := r.db.QueryRowContext(
+		ctx,
+		`SELECT id, email, password_hash, role, created_at
          FROM users
          WHERE email = $1`,
-        email,
-    ).Scan(
-        &user.ID,
-        &user.Email,
-        &user.PasswordHash,
-        &user.Role,
-        &user.CreatedAt,
-    )
+		email,
+	).Scan(
+		&user.ID,
+		&user.Email,
+		&user.PasswordHash,
+		&user.Role,
+		&user.CreatedAt,
+	)
 
-    if errors.Is(err, sql.ErrNoRows) {
-        return nil, sql.ErrNoRows
-    }
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, sql.ErrNoRows
+	}
 
-    if err != nil {
-        return nil, fmt.Errorf("get user by email: %w", err)
-    }
+	if err != nil {
+		return nil, fmt.Errorf("get user by email: %w", err)
+	}
 
-    return &user, nil
+	return &user, nil
 }

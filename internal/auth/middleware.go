@@ -52,8 +52,6 @@ func UserIDFromContext(c *gin.Context) (int64, bool) {
 	return userID, true
 }
 
-
-
 func RequireRole(allowedRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		value, exists := c.Get("authenticated_user_role")

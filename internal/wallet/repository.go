@@ -27,7 +27,6 @@ func NewRepository(db *sql.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
-
 func (r *PostgresRepository) Create(
 	ctx context.Context,
 	input CreateWalletInput,
@@ -91,7 +90,6 @@ func (r *PostgresRepository) Create(
 
 	return &wallet, nil
 }
-
 
 func (r *PostgresRepository) GetBalance(
 	ctx context.Context,

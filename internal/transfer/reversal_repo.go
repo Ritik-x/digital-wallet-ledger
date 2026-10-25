@@ -9,10 +9,10 @@ import (
 )
 
 var (
-	ErrTransferNotFound          = errors.New("transfer not found")
-	ErrTransferAlreadyReversed   = errors.New("transfer already reversed")
-	ErrTransferNotReversible     = errors.New("transfer is not reversible")
-	ErrReversalInsufficientFunds = errors.New("receiver has insufficient funds")
+	ErrTransferNotFound            = errors.New("transfer not found")
+	ErrTransferAlreadyReversed     = errors.New("transfer already reversed")
+	ErrTransferNotReversible       = errors.New("transfer is not reversible")
+	ErrReversalInsufficientFunds   = errors.New("receiver has insufficient funds")
 	ErrReversalIdempotencyConflict = errors.New(
 		"idempotency key already used for another reversal",
 	)
@@ -280,7 +280,6 @@ func (r *PostgresReversalRepository) Reverse(
 		return nil, fmt.Errorf("create reversal record: %w", err)
 	}
 
-	
 	_, err = tx.ExecContext(
 		ctx,
 		`

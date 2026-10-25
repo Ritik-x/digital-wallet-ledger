@@ -3,14 +3,14 @@ package history
 import "time"
 
 type Transaction struct {
-ID                  int64     `json:"id"`
-	Type                string    `json:"type"`
+	ID   int64  `json:"id"`
+	Type string `json:"type"`
 
-	AmountMinor         int64     `json:"amount_minor"`
-	Currency            string    `json:"currency"`
-	Status              string    `json:"status"`
-	CounterpartyWalletID *int64   `json:"counterparty_wallet_id"`
-	CreatedAt time.Time `json:"created_at" format:"date-time"`
+	AmountMinor          int64     `json:"amount_minor"`
+	Currency             string    `json:"currency"`
+	Status               string    `json:"status"`
+	CounterpartyWalletID *int64    `json:"counterparty_wallet_id"`
+	CreatedAt            time.Time `json:"created_at" format:"date-time"`
 }
 
 // ListInput contains the filters for retrieving transaction history.

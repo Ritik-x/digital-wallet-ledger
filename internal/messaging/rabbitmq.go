@@ -46,4 +46,3 @@ func Connect() (*amqp.Connection, *amqp.Channel, error) {
 
 	return conn, ch, nil
 }
- 

@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 )
+
 var (
 	ErrInvalidUserID   = errors.New("user ID must be positive")
 	ErrInvalidWalletID = errors.New("wallet ID must be positive")
 	ErrInvalidLimit    = errors.New("limit must be between 1 and 100")
 	ErrInvalidOffset   = errors.New("offset cannot be negative")
 )
+
 type Service struct {
 	repo Repository
 }

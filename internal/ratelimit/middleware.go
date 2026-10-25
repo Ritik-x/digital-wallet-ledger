@@ -34,7 +34,7 @@ func Middleware(
 			window,
 		)
 		if err != nil {
-		
+
 			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
 				"error": "rate limiting temporarily unavailable",
 			})
@@ -72,7 +72,6 @@ func buildRateLimitKey(
 	if userID, ok := auth.UserIDFromContext(c); ok {
 		return prefix + ":user:" + strconv.FormatInt(userID, 10), nil
 	}
-
 
 	ip := strings.TrimSpace(c.ClientIP())
 	if net.ParseIP(ip) == nil {

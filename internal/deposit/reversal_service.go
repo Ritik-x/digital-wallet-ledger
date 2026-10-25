@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	ErrInvalidReversalUserID = errors.New("user ID must be positive")
-	ErrInvalidReversalDepositID = errors.New("deposit ID must be positive")
+	ErrInvalidReversalUserID     = errors.New("user ID must be positive")
+	ErrInvalidReversalDepositID  = errors.New("deposit ID must be positive")
 	ErrInvalidDepositReversalKey = errors.New("valid idempotency key is required")
 )
 
