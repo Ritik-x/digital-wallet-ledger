@@ -55,15 +55,15 @@ func (h *Handler) CreateDeposit(c *gin.Context) {
 		})
 		return
 	}
-result, err := h.service.CreateRazorpayOrder(
-    c.Request.Context(),
-    CreateDepositInput{
-        WalletID:       req.WalletID,
-        AmountMinor:    req.AmountMinor,
-        Currency:       req.Currency,
-        IdempotencyKey: key,
-    },
-)
+	result, err := h.service.CreateRazorpayOrder(
+		c.Request.Context(),
+		CreateDepositInput{
+			WalletID:       req.WalletID,
+			AmountMinor:    req.AmountMinor,
+			Currency:       req.Currency,
+			IdempotencyKey: key,
+		},
+	)
 
 	if err != nil {
 		switch {
@@ -83,15 +83,16 @@ result, err := h.service.CreateRazorpayOrder(
 		case errors.Is(err, ErrCurrencyMismatch):
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 
-		default:case errors.Is(err, ErrRazorpayOrderInProgress):
-    c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		default:
+		case errors.Is(err, ErrRazorpayOrderInProgress):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 
-case errors.Is(err, ErrRazorpayOrderUncertain):
-    c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		case errors.Is(err, ErrRazorpayOrderUncertain):
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 
-case errors.Is(err, ErrRazorpayOrderNotCreated),
-    errors.Is(err, ErrRazorpayClientUnavailable):
-    c.JSON(http.StatusBadGateway, gin.H{"error": "payment order could not be created"})
+		case errors.Is(err, ErrRazorpayOrderNotCreated),
+			errors.Is(err, ErrRazorpayClientUnavailable):
+			c.JSON(http.StatusBadGateway, gin.H{"error": "payment order could not be created"})
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "could not create deposit",
 			})
