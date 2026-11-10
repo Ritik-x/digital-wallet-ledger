@@ -30,7 +30,7 @@ type CreateDepositRequest struct {
 // @Produce json
 // @Param Idempotency-Key header string true "Unique key for this deposit request"
 // @Param request body CreateDepositRequest true "Deposit details"
-// @Success 201 {object} Deposit "Deposit created"
+// @Success 201 {object} CreateRazorpayOrderResult "Razorpay order created"
 // @Failure 400 {object} map[string]interface{} "Invalid request or missing idempotency key"
 // @Failure 404 {object} map[string]interface{} "Wallet not found"
 // @Failure 409 {object} map[string]interface{} "Wallet unavailable or idempotency conflict"
@@ -55,16 +55,15 @@ func (h *Handler) CreateDeposit(c *gin.Context) {
 		})
 		return
 	}
-
-	result, err := h.service.Create(
-		c.Request.Context(),
-		CreateDepositInput{
-			WalletID:       req.WalletID,
-			AmountMinor:    req.AmountMinor,
-			Currency:       req.Currency,
-			IdempotencyKey: key,
-		},
-	)
+result, err := h.service.CreateRazorpayOrder(
+    c.Request.Context(),
+    CreateDepositInput{
+        WalletID:       req.WalletID,
+        AmountMinor:    req.AmountMinor,
+        Currency:       req.Currency,
+        IdempotencyKey: key,
+    },
+)
 
 	if err != nil {
 		switch {
@@ -84,7 +83,15 @@ func (h *Handler) CreateDeposit(c *gin.Context) {
 		case errors.Is(err, ErrCurrencyMismatch):
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 
-		default:
+		default:case errors.Is(err, ErrRazorpayOrderInProgress):
+    c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+
+case errors.Is(err, ErrRazorpayOrderUncertain):
+    c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+
+case errors.Is(err, ErrRazorpayOrderNotCreated),
+    errors.Is(err, ErrRazorpayClientUnavailable):
+    c.JSON(http.StatusBadGateway, gin.H{"error": "payment order could not be created"})
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "could not create deposit",
 			})

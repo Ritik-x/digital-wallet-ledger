@@ -21,11 +21,32 @@ var (
 )
 
 type Repository interface {
-	Create(ctx context.Context, input CreateDepositInput) (*Deposit, error)
+	Create(
+		ctx context.Context,
+		input CreateDepositInput,
+	) (*Deposit, error)
+
+	StartRazorpayOrder(
+		ctx context.Context,
+		depositID int64,
+	) (bool, error)
+
+	SaveRazorpayOrder(
+		ctx context.Context,
+		depositID int64,
+		orderID string,
+	) error
+
+	MarkRazorpayOrderUnknown(
+		ctx context.Context,
+		depositID int64,
+	) error
 
 	ConfirmPayment(
 		ctx context.Context,
 		depositID int64,
+		razorpayOrderID string,
+		razorpayPaymentID string,
 		amountMinor int64,
 		currency string,
 	) error
@@ -160,7 +181,124 @@ func (r *PostgresRepository) Create(
 
 	return &created, nil
 }
+func (r *PostgresRepository) StartRazorpayOrder(
+	ctx context.Context,
+	depositID int64,
+) (bool, error) {
 
+	result, err := r.db.ExecContext(
+		ctx,
+		`UPDATE deposits
+         SET razorpay_order_status = 'in_progress'
+         WHERE id = $1
+           AND status = 'pending'
+           AND razorpay_order_status = 'not_started'`,
+		depositID,
+	)
+
+	if err != nil {
+		return false, fmt.Errorf(
+			"claim razorpay order creation: %w",
+			err,
+		)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf(
+			"check razorpay order claim: %w",
+			err,
+		)
+	}
+
+	return rowsAffected == 1, nil
+}
+func (r *PostgresRepository) SaveRazorpayOrder(
+	ctx context.Context,
+	depositID int64,
+	orderID string,
+) error {
+
+	orderID = strings.TrimSpace(orderID)
+
+	if depositID <= 0 {
+		return fmt.Errorf("invalid deposit ID")
+	}
+
+	if orderID == "" {
+		return fmt.Errorf("razorpay order ID is required")
+	}
+
+	result, err := r.db.ExecContext(
+		ctx,
+		`UPDATE deposits
+         SET razorpay_order_id = $1,
+             razorpay_order_status = 'created'
+         WHERE id = $2
+           AND status = 'pending'
+           AND razorpay_order_status = 'in_progress'
+           AND razorpay_order_id IS NULL`,
+		orderID,
+		depositID,
+	)
+
+	if err != nil {
+		return fmt.Errorf("save razorpay order: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check razorpay order update: %w", err)
+	}
+
+	if rowsAffected != 1 {
+		return fmt.Errorf(
+			"deposit is not eligible for razorpay order update",
+		)
+	}
+
+	return nil
+}
+
+func (r *PostgresRepository) MarkRazorpayOrderUnknown(
+	ctx context.Context,
+	depositID int64,
+) error {
+
+	result, err := r.db.ExecContext(
+		ctx,
+		`UPDATE deposits
+         SET razorpay_order_status = 'unknown'
+         WHERE id = $1
+           AND status = 'pending'
+           AND razorpay_order_status = 'in_progress'
+           AND razorpay_order_id IS NULL`,
+		depositID,
+	)
+
+	if err != nil {
+		return fmt.Errorf(
+			"mark razorpay order as unknown: %w",
+			err,
+		)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf(
+			"check unknown razorpay order update: %w",
+			err,
+		)
+	}
+
+	if rowsAffected != 1 {
+		return fmt.Errorf(
+			"deposit is not eligible for unknown razorpay order status",
+		)
+	}
+
+	return nil
+}
 func findDepositByKey(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -171,9 +309,10 @@ func findDepositByKey(
 	err := tx.QueryRowContext(
 		ctx,
 		`SELECT id, wallet_id, amount_minor, currency,
-		        status, idempotency_key, created_at
-		 FROM deposits
-		 WHERE idempotency_key = $1`,
+       status, idempotency_key, created_at,
+       razorpay_order_id, razorpay_order_status
+FROM deposits
+WHERE idempotency_key = $1`,
 		key,
 	).Scan(
 		&d.ID,
@@ -183,6 +322,8 @@ func findDepositByKey(
 		&d.Status,
 		&d.IdempotencyKey,
 		&d.CreatedAt,
+		&d.RazorpayOrderID,
+		&d.RazorpayOrderStatus,
 	)
 
 	if err != nil {
@@ -195,6 +336,8 @@ func findDepositByKey(
 func (r *PostgresRepository) ConfirmPayment(
 	ctx context.Context,
 	depositID int64,
+	razorpayOrderID string,
+	razorpayPaymentID string,
 	amountMinor int64,
 	currency string,
 ) error {
@@ -209,19 +352,28 @@ func (r *PostgresRepository) ConfirmPayment(
 	var depositAmount int64
 	var depositCurrency string
 	var status string
+	var storedOrderID sql.NullString
+	var storedPaymentID sql.NullString
 
 	err = tx.QueryRowContext(
 		ctx,
-		`SELECT wallet_id, amount_minor, currency, status
-		 FROM deposits
-		 WHERE id = $1
-		 FOR UPDATE`,
+		`SELECT wallet_id,
+            amount_minor,
+            currency,
+            status,
+            razorpay_order_id,
+            razorpay_payment_id
+     FROM deposits
+     WHERE id = $1
+     FOR UPDATE`,
 		depositID,
 	).Scan(
 		&walletID,
 		&depositAmount,
 		&depositCurrency,
 		&status,
+		&storedOrderID,
+		&storedPaymentID,
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
@@ -230,7 +382,13 @@ func (r *PostgresRepository) ConfirmPayment(
 	if err != nil {
 		return fmt.Errorf("lock deposit: %w", err)
 	}
-
+	// Verify that this payment belongs to the Razorpay order
+	// created for this LedgerX deposit.
+	if !storedOrderID.Valid ||
+		storedOrderID.String != razorpayOrderID ||
+		strings.TrimSpace(razorpayPaymentID) == "" {
+		return ErrPaymentMismatch
+	}
 	// Never trust the webhook's amount or currency alone.
 	if depositAmount != amountMinor ||
 		strings.TrimSpace(depositCurrency) != strings.TrimSpace(currency) {
@@ -239,7 +397,12 @@ func (r *PostgresRepository) ConfirmPayment(
 
 	// A duplicate delivery must never create duplicate ledger entries.
 	if status == "posted" {
-		return nil
+		if storedPaymentID.Valid &&
+			storedPaymentID.String == razorpayPaymentID {
+			return nil
+		}
+
+		return ErrPaymentMismatch
 	}
 	if status != "pending" {
 		return ErrDepositNotPending
@@ -340,9 +503,14 @@ func (r *PostgresRepository) ConfirmPayment(
 	result, err := tx.ExecContext(
 		ctx,
 		`UPDATE deposits
-		 SET status = 'posted'
-		 WHERE id = $1 AND status = 'pending'`,
+ SET status = 'posted',
+     razorpay_payment_id = $2
+ WHERE id = $1
+   AND status = 'pending'
+   AND razorpay_order_id = $3`,
 		depositID,
+		razorpayPaymentID,
+		razorpayOrderID,
 	)
 	if err != nil {
 		return fmt.Errorf("mark deposit posted: %w", err)

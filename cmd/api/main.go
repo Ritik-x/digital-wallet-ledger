@@ -18,6 +18,7 @@ import (
 	"digital-wallet/internal/notification"
 	"digital-wallet/internal/observability"
 	"digital-wallet/internal/ratelimit"
+	"digital-wallet/internal/razorpay"
 	"digital-wallet/internal/transfer"
 	"digital-wallet/internal/wallet"
 	"log"
@@ -89,13 +90,13 @@ func main() {
 	log.Println("Outbox publisher started")
 
 	// Validate application secrets.
-	webhookSecret := os.Getenv("MOCK_PAYMENT_WEBHOOK_SECRET")
+	// Validate application secrets.
+	webhookSecret := os.Getenv("RAZORPAY_WEBHOOK_SECRET")
 	if len(webhookSecret) < 32 {
 		log.Fatal(
-			"MOCK_PAYMENT_WEBHOOK_SECRET must be at least 32 characters",
+			"RAZORPAY_WEBHOOK_SECRET must be at least 32 characters",
 		)
 	}
-
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if len(jwtSecret) < 32 {
 		log.Fatal(
@@ -151,15 +152,30 @@ func main() {
 	transferHandler := transfer.NewHandler(transferService)
 
 	// Initialize deposit module.
+	// Initialize Razorpay client.
+	razorpayClient, err := razorpay.NewClient(
+		os.Getenv("RAZORPAY_KEY_ID"),
+		os.Getenv("RAZORPAY_KEY_SECRET"),
+	)
+	if err != nil {
+		log.Fatalf("initialize Razorpay: %v", err)
+	}
+
+	log.Println("Razorpay client initialized successfully")
+
+	// Initialize deposit module.
 	depositRepo := deposit.NewRepository(db)
-	depositService := deposit.NewService(depositRepo)
+	depositService := deposit.NewService(
+		depositRepo,
+		razorpayClient,
+	)
 	depositHandler := deposit.NewHandler(depositService)
 
+	// Initialize Razorpay webhook handler.
 	webhookHandler := deposit.NewWebhookHandler(
 		depositService,
 		webhookSecret,
 	)
-
 	// Initialize authentication module.
 	authRepo := auth.NewPostgresUserRepository(db)
 	authService := auth.NewService(authRepo, jwtSecret)
@@ -207,11 +223,11 @@ func main() {
 	api := router.Group("/api/v1")
 
 	// Mock payment provider webhook.
+	// Razorpay payment webhook.
 	api.POST(
-		"/webhooks/mock-payment",
+		"/webhooks/razorpay",
 		webhookHandler.Handle,
 	)
-
 	// Public authentication routes with rate limiting.
 	authRoutes := api.Group("/auth")
 	authRoutes.Use(

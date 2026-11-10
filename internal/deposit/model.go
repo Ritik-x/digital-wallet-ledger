@@ -17,4 +17,8 @@ type Deposit struct {
 	Status         string    `json:"status"`
 	IdempotencyKey string    `json:"idempotency_key"`
 	CreatedAt      time.Time `json:"created_at"`
+
+    // Internal Razorpay tracking fields.
+    RazorpayOrderID     string `json:"-"`
+    RazorpayOrderStatus string `json:"-"`
 }
